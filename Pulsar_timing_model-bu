@@ -1,0 +1,194 @@
+import sys
+import matplotlib.pyplot as plt
+import math
+import os.path
+from pylab import *
+from numpy import *
+
+
+def Cel2Ecl( A, B ):
+  betaa = math.asin( math.sin(math.radians(B) )*math.cos(math.radians(23.43) )-math.sin(math.radians(23.43) )*math.sin(math.radians(A))*math.cos(math.radians(B) ))
+  lamdaa = math.acos( math.cos(math.radians(A) )*math.cos(math.radians(B))/math.cos(math.radians(betaa)))
+  return (lamdaa,betaa)
+
+def remove_space( A ):
+    ret = []
+    for curr in A:
+        if curr != '':
+            ret.append( curr )
+    return ret
+
+
+
+
+
+inFile = open( sys.argv[1], "r" )
+save_path = sys.argv[2]
+
+
+All = inFile.readlines()
+
+# From here, this code automatically read all the parameters needed for plotting.It should be working for every single par file. 
+
+DMR = []
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:4] == "DMX_":
+        X = remove_space( X )
+        DMR.append( float( X[1] ) )
+DMX = DMR + DMR
+
+DMXR1 = []
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:5] == "DMXR1":
+        X = remove_space( X )
+        DMXR1.append( float( X[1] ) )
+
+DMXR2 = []
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:5] == "DMXR2":
+        X = remove_space( X )
+        DMXR2.append( float( X[1] ) )
+
+#DM, FO, F1, PEPOCH, DECJ, RAJ, M2, START, FINISH. 
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:4] == "DM":
+        X = remove_space( X )
+        DM = float( X[1] )
+
+
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:4] == "F0":
+        X = remove_space( X )
+        F0=  float( X[1] )
+
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:4] == "F1":
+        X = remove_space( X )
+        F1 = float( X[1] )
+
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:4] == "DECJ":
+        X = remove_space( X )
+        DECJ =  X[1].split(':')
+
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:3] == "RAJ":
+        X = remove_space( X )
+        RAJ = X[1].split(':')
+
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:4] == "M2":
+        X = remove_space( X )
+        M2 = float( X[1] )
+
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:6] == "PEPOCH":
+        X = remove_space( X )
+        PEPOCH = float( X[1] )
+
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:5] == "START":
+        X = remove_space( X )
+        START = float( X[1] )
+
+
+for line in All:
+    X = line.split(' ')
+    if X[0][0:6] == "FINISH":
+        X = remove_space( X )
+        FINISH = float( X[1] )
+
+
+#sort DMX and DM
+for i in range(len(DMX)):
+    DMX[i]+=DM
+
+DMXRI = DMXR1 + DMXR2
+index = {}
+for i in range(len(DMXRI)):
+    index[DMXRI[i]]=i
+
+DMXRI.sort()
+d=[]
+for i in range(len(DMXRI)):
+    d.append(DMX[index[DMXRI[i]]])
+    
+#convert DM to delays for plotting 
+b = [x * 4.419 * 10**5 * (600**-2 - 800**-2) * 0.001 for x in d]
+
+
+#convert RAJ and DECJ to degrees
+
+rah = float( RAJ[0] )
+ram = float( RAJ[1] )
+ras = float( RAJ[2] )
+deg = (rah) + (ram/60) + (ras/3600)
+
+dech = float( DECJ[0] )
+decm = float( DECJ[1] )
+decs = float( DECJ[2] )
+deg2 = (dech) + (decm/60) + (decs/3600)
+
+# Convert RA and DEC to longitude and latitude
+lamdaa, betaa = Cel2Ecl( deg, deg2 )
+
+
+
+
+# range depends on whether the par file is a 5 year or 9 year data.
+t = arange(START, FINISH, 0.01)
+
+s1 = 500  * cos(betaa) * cos(( t  - START  ) * 2 * pi  /365.25 + lamdaa) #here roemer has a much larger coefficient compare to the other two, so I reduce its value by 10^-22 to make them on the same scale
+s2 = - F1 * ((t - START) * 2 * pi /365.25)  /( F0**2)
+s3 = 4.149 * 10**5 * DM * t/t * (600**-2 - 800**-2) * 0.001 
+
+ax4 = subplot(414)
+plt.plot(t,s1 + s2 - s3,'c',label='delay sum')
+setp( ax4.get_xticklabels(), fontsize=10)
+plt.legend(bbox_to_anchor=(0, 1), loc=2, borderaxespad=0.,prop={'size':7})
+
+
+ax1 = subplot(411,sharex=ax4)
+plot(t,s1,'r',label='SS \n Roemer \n Delay')
+plt.title('Pulsar Timing Models \n (x-axis:date y-axis:seconds ) ')
+setp( ax1.get_xticklabels(), visible=False)
+plt.legend(bbox_to_anchor=(0, 1), loc=2, borderaxespad=0.,prop={'size':7})
+
+
+ax2 = subplot(412, sharex=ax4)
+plt.plot(t,s2,'b',label='Period Derivatives')
+setp( ax2.get_xticklabels(), visible=False)
+plt.legend(bbox_to_anchor=(0, 1), loc=2, borderaxespad=0.,prop={'size':10})
+
+
+ax3 = subplot(413, sharex=ax4)
+plt.plot(DMXRI, b, 'k_-',label='DMxth')
+plt.plot(DMXRI, b, 'g-')
+setp( ax3.get_xticklabels(), visible=False)
+plt.legend(bbox_to_anchor=(0, 1), loc=2, borderaxespad=0.,prop={'size':8.5})
+ax4.yaxis.label.set_color('g')
+
+#sys.argv[2].split("/")[-1]
+plt.savefig( os.path.join(sys.argv[2], sys.argv[1].split("/")[-1].split("_")[0] + "pulsar_timing_model.png") )

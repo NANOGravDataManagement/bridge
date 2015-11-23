@@ -90,8 +90,8 @@ params = {'backend': 'pdf',
         'ytick.labelsize': 10,
         'savefig.dpi':200,
         'path.simplify':True,
-        'font.family': 'serif',
-        'font.serif':'cm',
+        #'font.family': 'serif',
+        #'font.serif':'cm',
         'text.usetex':False,
         'axes.color_cycle': ['b', 'lime', 'r', 'purple', 'g', 'c', 'm',
                              'orange', 'darkblue', 'darkcyan', 'y',
@@ -120,6 +120,7 @@ for t,p in zip(timFiles[:], parFiles[:]):
     if get_name(p) in args.pname or args.pname[0] == 'all':
         pf = strip_parfile(p)
         df.addTempoPulsar(pf, t)
+        os.system('rm {0}'.format(pf))
 
 if args.pname[0] != 'all':
     pulsar_names = args.pname

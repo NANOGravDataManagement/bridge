@@ -3,6 +3,8 @@ import numpy as np
 from PAL2 import PALmodels
 from PAL2 import PALutils
 from PAL2 import PALdatafile
+from PAL2 import PALInferencePTMCMC
+from PAL2 import bayesutils as bu
 from scipy.optimize import fmin, minimize
 import matplotlib.pyplot as plt
 import matplotlib.ticker
@@ -27,7 +29,7 @@ parser.add_argument('--pta', dest='pta', action='store', type=str,
 parser.add_argument('--noisedir', dest='noisedir', action='store', type=str, default=None,
                    help='Full path to noisefile directory (default = None)')
 parser.add_argument('--pipeline', dest='pipeline', action='store', type=str, default='OS',
-                   help='Which pipeline to run (default = OS) [Fstat, OS]')
+                   help='Which pipeline to run (default = OS) [Fstat, OS, BWM]')
 
 
 def get_name(parfile):
@@ -230,8 +232,16 @@ if args.pipeline == 'OS':
         likfunc = 'mark2'
     else:
         likfunc = 'mark1'
-elif args.pipeline == 'Fstat':
+elif args.pipeline in ['Fstat']:
     likfunc = 'mark6'
+
+# include BWM?
+incBWM = False
+if args.pipeline == 'BWM':
+    incBWM = True
+    likfunc = 'mark9'
+
+print likfunc, incBWM
     
 fullmodel = model.makeModelDict(incRedNoise=True, noiseModel='powerlaw',
                     incDM=incDM, dmModel='powerlaw',
@@ -240,7 +250,7 @@ fullmodel = model.makeModelDict(incRedNoise=True, noiseModel='powerlaw',
                     separateJitter=False, separateJitterEquadByFreq=True,
                     incEquad=incEquad, incJitter=False, incJitterEquad=incJitterEquad,
                     incGWB=False, nfreqs=50, ndmfreqs=50, Tmax=0,
-                    compression='None', likfunc=likfunc)
+                    incBWM=incBWM, compression='None', likfunc=likfunc)
 
 if args.noisedir is None:
     noisedir = outdir + '/noisefiles/'
@@ -252,7 +262,15 @@ for ct, p in enumerate(model.psr):
     pars = d[:,0]
     vals = np.array([float(d[ii,1]) for ii in range(d.shape[0])])
     sigs = [psig for psig in fullmodel['signals'] if psig['pulsarind'] == ct]
-    sigs = PALutils.fixNoiseValues(sigs, vals, pars, bvary=True, verbose=False)
+    sigs = PALutils.fixNoiseValues(sigs, vals, pars, bvary=False, verbose=False)
+
+# turn red noise back on
+if args.pipeline == 'BWM':
+    print 'Turning on red noise and only fixing white noise'
+    for sig in fullmodel['signals']:
+        if sig['corr'] == 'single' and sig['stype'] == 'powerlaw':
+            sig['bvary'][1] = True
+            sig['bvary'][0] = True
     
 model.initModel(fullmodel, memsave=True, fromFile=False, verbose=False, write='no')
 
@@ -359,4 +377,67 @@ elif args.pipeline == 'Fstat':
     plt.legend(loc='best', frameon=False)
     plt.minorticks_on()
     plt.savefig(outdir+'/fpstat.png', bbox_inches='tight')
+
+elif args.pipeline == 'BWM':
+
+    # set up loglkwargs for sampler
+    loglkwargs = {}
+    #loglkwargs['incJitter'] = incJitterEquad
+    loglkwargs['fixWhite'] = True
+
+    # parameters 
+    pars = model.get_varying_parameters()
+    print pars
+    np.savetxt(args.outdir + '/pars.txt', pars, fmt='%s')
+
+    # likelihood function and prior
+    loglike = model.mark9LogLikelihood
+    logprior = model.mark3LogPrior
+
+    # call likelihood function once
+    loglike(p0)
+
+    # set up jump indices
+    ind = []
+    ids = model.get_parameter_indices('powerlaw', corr='single', split=True)
+    [ind.append(id) for id in ids if len(id) > 0]
+
+    if incDM: 
+        ids = model.get_parameter_indices('dmpowerlaw', corr='single', split=True)
+        [ind.append(id) for id in ids]
+
+    ids = model.get_parameter_indices('bwm', corr='gr', split=True)
+    [ind.append(id) for id in ids]
     
+    ind.insert(0, range(len(p0)))
+    print ind
+
+    # number of iterations and number of effective samples
+    N = 100000
+    neff = 1000
+    
+    # set up covariance matrix for jumps
+    cov = model.initJumpCovariance()
+    
+    # define MCMC sampler
+    sampler = PALInferencePTMCMC.PTSampler(len(p0), loglike, logprior, cov,
+                                           outDir=args.outdir, 
+                                           loglkwargs=loglkwargs,
+                                           groups=ind)
+    
+    # add in prior draws for red noise
+    sampler.addProposalToCycle(model.drawFromRedNoisePrior, 5)
+
+    # sample 
+    sampler.sample(p0, N, covUpdate=1000, AMweight=15, SCAMweight=30, 
+                   DEweight=50, neff=neff, KDEweight=0)
+
+    # read in chain
+    chain = np.loadtxt(args.outdir + '/chain_1.txt')
+    burn = int(0.25 * chain.shape[0])
+    pars = np.loadtxt(args.outdir + '/pars.txt', dtype='S42')
+
+    # make triangle plot
+    ax = bu.triplot(chain[burn:,-9:-4], labels=list(pars[-5:]), tex=False)
+    plt.savefig(args.outdir + '/bwm_triplot.png', bbox_inches='tight')
+

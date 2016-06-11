@@ -1,0 +1,3 @@
+efac 0.974758682558
+RN-Amplitude -13.4606016297
+RN-spectral-index 5.63236765314

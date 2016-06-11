@@ -25,7 +25,7 @@ parser.add_argument('--outdir', dest='outdir', action='store', type=str, default
 parser.add_argument('--pulsar', dest='pname', action='store', nargs='+', \
                     type=str, required=True, help='names of pulsars to use')
 parser.add_argument('--pta', dest='pta', action='store', type=str, 
-                    help='Which PTA set to use [nanograv9, nanograv5, pptadr1] (default=None)')
+                    help='Which PTA set to use [nanograv9, nanograv5, pptadr1, iptadr1, mdc] (default=None)')
 parser.add_argument('--noisedir', dest='noisedir', action='store', type=str, default=None,
                    help='Full path to noisefile directory (default = None)')
 parser.add_argument('--pipeline', dest='pipeline', action='store', type=str, default='OS',
@@ -43,11 +43,12 @@ def get_name(parfile):
     fout.close()
     return name
 
-def strip_parfile(parfile):
+def strip_parfile(parfile, pta='nanograv9'):
 
     flags = ['TNEF', 'T2EFAC', 'TNEQ', 'T2EQUAD', 'TNECORR', 'ECORR', 
              'TNRedAmp', 'TNRedGam', 'TNRedC', 'TNDMAmp', 'TNDMGam', 
-             'TNDMC', 'TNShapeletEvent', 'RNAMP', 'RNIDX']
+             'TNDMC', 'TNShapeletEvent', 'RNAMP', 'RNIDX', 'DMMODEL', 
+             'DMOFF', 'CONSTRAIN', 'WEIGHT']
     
     tmpname = parfile.split('/')[-1].split('.par')[0] + '_tmp.par'
     tmpfile = open(tmpname, 'w')
@@ -55,8 +56,15 @@ def strip_parfile(parfile):
     lines = fout.readlines()
     for line in lines:
         if line.split()[0] not in flags:
-            tmpfile.write('%s'%line)
+            if pta in ['pptadr1', 'iptadr1'] and line.split()[0] not in ['DM1', 'DM2']:
+                tmpfile.write('%s'%line)
+            else:
+                tmpfile.write('%s'%line)
 
+    # add DM quadradic
+    if pta in ['pptadr1','iptadr1']:
+        tmpfile.write('DM1 0 1\n')
+        tmpfile.write('DM2 0 1\n')
     tmpfile.close()
 
     return tmpname
@@ -120,7 +128,7 @@ h5filename = outdir + '/h5file.hdf5'
 df = PALdatafile.DataFile(h5filename)
 for t,p in zip(timFiles[:], parFiles[:]):
     if get_name(p) in args.pname or args.pname[0] == 'all':
-        pf = strip_parfile(p)
+        pf = strip_parfile(p, pta=args.pta)
         df.addTempoPulsar(pf, t, iterations=0)
         os.system('rm {0}'.format(pf))
 
@@ -139,7 +147,7 @@ print args.pta
 if args.pta in ['nanograv9', 'nanograv5']:
     incEquad = True
     incJitterEquad = True
-elif args.pta in ['pptadr1']:
+elif args.pta in ['pptadr1', 'iptadr1']:
     incEquad = True
     incDM = True
 
@@ -167,7 +175,7 @@ if args.noisedir is None:
                         compression='None', likfunc='mark6')
         
         model.initModel(fullmodel, memsave=True, fromFile=False,
-                        verbose=False, write='no')
+                        verbose=True, write='no')
         
         pardes = model.getModelParameterList()
         par_names = [p['id'] for p in pardes if p['index'] != -1]

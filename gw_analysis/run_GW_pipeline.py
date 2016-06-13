@@ -337,12 +337,12 @@ if args.pipeline == 'OS':
     #plt.xlabel('Angular Separation [degrees]')
     #plt.ylabel('Correlation Coefficient')
     plt.savefig(outdir+'/hd.png', bbox_inches='tight')
-    print 'A_gw = {0}'.format(np.sqrt(np.abs(Opt)))
-    print 'A_95 = {0}'.format(np.sqrt(np.abs(Opt + np.sqrt(2)*Sig*ss.erfcinv(2*(1-0.95)))))
+    print 'A_gw = {0}'.format(np.sqrt(Opt))
+    print 'A_95 = {0}'.format(np.sqrt(Opt + np.sqrt(2)*Sig*ss.erfcinv(2*(1-0.95))))
     print 'SNR = {0}'.format(Opt/Sig)
     x = {}
-    x['A_gw'] = np.sqrt(np.abs(Opt))
-    x['A_95'] = np.sqrt(np.abs(Opt + np.sqrt(2)*Sig*ss.erfcinv(2*(1-0.95))))
+    x['A_gw'] = np.sqrt(Opt)
+    x['A_95'] = np.sqrt(Opt + np.sqrt(2)*Sig*ss.erfcinv(2*(1-0.95)))
     x['SNR'] = Opt/Sig
     with open(outdir + '/os_out.json', 'w') as f:
         json.dump(x, f)
